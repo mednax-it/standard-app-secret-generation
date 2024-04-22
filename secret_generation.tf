@@ -64,3 +64,9 @@ resource "azurerm_key_vault_secret" "client_secret" {
   value = resource.azuread_application_password.client_secret[0].value
   key_vault_id = data.azurerm_key_vault.kv.id
 }
+
+resource "null_resource" "cleanse_state" {
+  provisioner "local-exec" {
+    command = "rm -rf *.tfstate"
+  }
+}
