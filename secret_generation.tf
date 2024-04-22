@@ -42,7 +42,7 @@ data "azurerm_key_vault_secrets" "secrets" {
 }
 
 data "azurerm_key_vault_secret" "secret" {
-  count = contains(data.azurerm_key_vault_secrets.secrets.names, var.key_name) ? 1 : 0
+  count = (contains(data.azurerm_key_vault_secrets.secrets.names, var.key_name) ? 1 : 0)
   name = var.key_name
   key_vault_id = data.azurerm_key_vault.kv.id
 }
@@ -52,14 +52,14 @@ data "azuread_application" "appreg" {
 }
 
 resource "azuread_application_password" "client_secret" {
-  count = try(data.azurerm_key_vault_secret.secret ? 0 : 1, 1)
+  count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   application_id = data.azuread_application.appreg.id
   display_name = var.key_name
   end_date_relative = "876600h"
 }
 
 resource "azurerm_key_vault_secret" "client_secret" {
-  count = try(data.azurerm_key_vault_secret.secret ? 0 : 1, 1)
+  count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   name = var.key_name
   value = resource.azuread_application_password.client_secret[0].value
   key_vault_id = data.azurerm_key_vault.kv.id
