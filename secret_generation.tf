@@ -1,13 +1,19 @@
-provider "azurerm" {
-  features {}
-}
-
 terraform {
   required_providers {
     azuread = {
       source  = "hashicorp/azuread"
+      version = "~> 2"
+    }
+
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3"
     }
   }
+}
+
+provider "azurerm" {
+  features {}
 }
 
 variable "app_registration_id" {
