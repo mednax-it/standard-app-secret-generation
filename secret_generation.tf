@@ -61,7 +61,11 @@ resource "azuread_application_password" "client_secret" {
   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   application_id = data.azuread_application.appreg.id
   display_name = var.key_name
-  end_date_relative = "876600h"
+  provisioner "local-exec" {
+    when="create"
+    command = "az ad app credential reset --id '${self.id}}' --append --display-name 'long-life' --years 100"
+    
+  }
 }
 
 resource "azurerm_key_vault_secret" "client_secret" {
@@ -69,10 +73,24 @@ resource "azurerm_key_vault_secret" "client_secret" {
   name = var.key_name
   value = resource.azuread_application_password.client_secret[0].value
   key_vault_id = data.azurerm_key_vault.kv.id
+  expiration_date = formatdate("YYYY-MM-DD", time_offset.future_date.rfc3339)
+  tags = { "phase": local.phase }
 }
 
 resource "null_resource" "cleanse_state" {
   provisioner "local-exec" {
     command = "rm -rf *.tfstate"
   }
+}
+
+
+# For the expiration date on the Keyvault
+resource "time_offset" "future_date" {
+  offset_years = 100
+}
+
+locals {
+  app_name = data.azuread_application.appreg.name
+  is_prod = contains("prod", local.app_name) || (!contains("non-prod", local.app_name) && !contains("dev", local.app_name) && !contain("stage", local.app_name) && !contain("test", local.app_name))
+  phase = is_prod ? "Prod" : "PPE"
 }
