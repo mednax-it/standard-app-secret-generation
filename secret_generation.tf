@@ -61,27 +61,38 @@ resource "azuread_application_password" "client_secret" {
   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   application_id = data.azuread_application.appreg.id
   display_name = var.key_name
+  
+}
+
+resource "null_resource" "create_longlife_key" {
   provisioner "local-exec" {
-    when="create"
-    command = "az ad app credential reset --id '${self.id}}' --append --display-name 'long-life' --years 100"
-    
+    when=create
+    command = "az ad app credential reset --id '${data.azuread_application.appreg.client_id}' --append --display-name '${var.key_name}' --years 100"
   }
+
+}
+
+data "external" "long_live_key" {
+  program = ["bash", "secret_generation.tf"]
+
+  query = {
+    # arbitrary map from strings to strings, passed
+    # to the external program as the data query.
+    client_id = "${data.azuread_application.appreg.client_id}"
+    secret_name = "${var.key_name}"
+    }
 }
 
 resource "azurerm_key_vault_secret" "client_secret" {
   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   name = var.key_name
-  value = resource.azuread_application_password.client_secret[0].value
+  value = data.external.long_live_key.result.secret
   key_vault_id = data.azurerm_key_vault.kv.id
-  expiration_date = formatdate("YYYY-MM-DD", time_offset.future_date.rfc3339)
+  expiration_date = time_offset.future_date.rfc3339
   tags = { "phase": local.phase }
 }
 
-resource "null_resource" "cleanse_state" {
-  provisioner "local-exec" {
-    command = "rm -rf *.tfstate"
-  }
-}
+
 
 
 # For the expiration date on the Keyvault
@@ -90,7 +101,13 @@ resource "time_offset" "future_date" {
 }
 
 locals {
-  app_name = data.azuread_application.appreg.name
-  is_prod = contains("prod", local.app_name) || (!contains("non-prod", local.app_name) && !contains("dev", local.app_name) && !contain("stage", local.app_name) && !contain("test", local.app_name))
-  phase = is_prod ? "Prod" : "PPE"
+  app_name = data.azuread_application.appreg.display_name
+  is_prod = strcontains("prod", local.app_name) || (!strcontains("non-prod", local.app_name) && !strcontains("dev", local.app_name) && !strcontains("stage", local.app_name) && !strcontains("test", local.app_name))
+  phase = local.is_prod ? "Prod" : "PPE"
+}
+
+resource "null_resource" "cleanse_state" {
+  provisioner "local-exec" {
+    command = "rm -rf *.tfstate"
+  }
 }
