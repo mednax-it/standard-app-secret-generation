@@ -57,23 +57,18 @@ data "azuread_application" "appreg" {
   client_id = var.app_registration_id
 }
 
-resource "azuread_application_password" "client_secret" {
-  count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
-  application_id = data.azuread_application.appreg.id
-  display_name = var.key_name
+# resource "azuread_application_password" "client_secret" {
+#   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
+#   application_id = data.azuread_application.appreg.id
+#   display_name = var.key_name
   
-}
+# }
 
-resource "null_resource" "create_longlife_key" {
-  provisioner "local-exec" {
-    when=create
-    command = "az ad app credential reset --id '${data.azuread_application.appreg.client_id}' --append --display-name '${var.key_name}' --years 100"
-  }
 
-}
 
 data "external" "long_live_key" {
-  program = ["bash", "secret_generation.tf"]
+  count = (contains(data.azurerm_key_vault_secrets.secrets.names, var.key_name) ? 0 : 1)
+  program = ["bash", "update_secret.sh"]
 
   query = {
     # arbitrary map from strings to strings, passed
@@ -86,7 +81,7 @@ data "external" "long_live_key" {
 resource "azurerm_key_vault_secret" "client_secret" {
   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   name = var.key_name
-  value = data.external.long_live_key.result.secret
+  value = data.external.long_live_key[0].result.secret
   key_vault_id = data.azurerm_key_vault.kv.id
   expiration_date = time_offset.future_date.rfc3339
   tags = { "phase": local.phase }

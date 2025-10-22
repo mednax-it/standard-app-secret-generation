@@ -7,7 +7,7 @@ set -e
 # and escaped for consumption by the shell.
 eval "$(jq -r '@sh "client_id=\(.client_id) secret_name=\(.secret_name)"')"
 
-export az_response=$(az ad app credential reset --id "${client_id}" --append --output json --display-name "${secret_name}" --years 100)
+export az_response=$(az ad app credential reset --id "${client_id}" --append --display-name "${secret_name}" --years 100 --output json)
 secret=$( jq -r  '.password' <<< "${az_response}" ) 
 # Safely produce a JSON object containing the result value.
 # jq will ensure that the value is properly quoted
