@@ -57,18 +57,48 @@ data "azuread_application" "appreg" {
   client_id = var.app_registration_id
 }
 
-resource "azuread_application_password" "client_secret" {
-  count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
-  application_id = data.azuread_application.appreg.id
-  display_name = var.key_name
-  end_date_relative = "876600h"
+# resource "azuread_application_password" "client_secret" {
+#   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
+#   application_id = data.azuread_application.appreg.id
+#   display_name = var.key_name
+  
+# }
+
+
+
+data "external" "long_live_key" {
+  count = (contains(data.azurerm_key_vault_secrets.secrets.names, var.key_name) ? 0 : 1)
+  program = ["bash", "update_secret.sh"]
+
+  query = {
+    # arbitrary map from strings to strings, passed
+    # to the external program as the data query.
+    client_id = "${data.azuread_application.appreg.client_id}"
+    secret_name = "${var.key_name}"
+    }
 }
 
 resource "azurerm_key_vault_secret" "client_secret" {
   count = try(data.azurerm_key_vault_secret.secret[0].name == var.key_name ? 0 : 1, 1)
   name = var.key_name
-  value = resource.azuread_application_password.client_secret[0].value
+  value = data.external.long_live_key[0].result.secret
   key_vault_id = data.azurerm_key_vault.kv.id
+  expiration_date = time_offset.future_date.rfc3339
+  tags = { "phase": local.phase }
+}
+
+
+
+
+# For the expiration date on the Keyvault
+resource "time_offset" "future_date" {
+  offset_years = 100
+}
+
+locals {
+  app_name = data.azuread_application.appreg.display_name
+  is_prod = strcontains("prod", local.app_name) || (!strcontains("non-prod", local.app_name) && !strcontains("dev", local.app_name) && !strcontains("stage", local.app_name) && !strcontains("test", local.app_name))
+  phase = local.is_prod ? "Prod" : "PPE"
 }
 
 resource "null_resource" "cleanse_state" {
